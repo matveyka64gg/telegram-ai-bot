@@ -1,10 +1,11 @@
+import os
 import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from openai import OpenAI
 
-TELEGRAM_TOKEN = "YOUR_TELEGRAM_TOKEN"
-GROQ_API_KEY = "YOUR_GROQ_API_KEY"
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
