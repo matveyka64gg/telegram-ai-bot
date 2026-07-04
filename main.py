@@ -1,12 +1,29 @@
 import os
 import asyncio
+import sys
+
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.filters import Command
 from openai import OpenAI
 
+# ───────────────
+# ENV
+# ───────────────
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+if not TELEGRAM_TOKEN:
+    print("❌ TELEGRAM_TOKEN is missing")
+    sys.exit()
+
+if not GROQ_API_KEY:
+    print("❌ GROQ_API_KEY is missing")
+    sys.exit()
+
+# ───────────────
+# BOT INIT
+# ───────────────
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
@@ -16,7 +33,7 @@ client = OpenAI(
 )
 
 # ───────────────
-# ДАННЫЕ
+# DATA STORAGE
 # ───────────────
 memory = {}
 user_model = {}
@@ -29,12 +46,15 @@ MODELS = {
 }
 
 # ───────────────
-# КЛАВИАТУРА МОДЕЛЕЙ
+# KEYBOARD
 # ───────────────
 def model_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🤖 llama"), KeyboardButton(text="⚡ mixtral")]
+            [
+                KeyboardButton(text="🤖 llama"),
+                KeyboardButton(text="⚡ mixtral")
+            ]
         ],
         resize_keyboard=True
     )
@@ -42,7 +62,7 @@ def model_keyboard():
 # ───────────────
 # START
 # ───────────────
-@dp.message(commands=["start"])
+@dp.message(Command("start"))
 async def start(message: types.Message):
     user_id = message.from_user.id
 
@@ -62,20 +82,20 @@ async def start(message: types.Message):
     )
 
 # ───────────────
-# ВЫБОР МОДЕЛИ
+# MAIN HANDLER
 # ───────────────
 @dp.message()
 async def handler(message: types.Message):
     user_id = message.from_user.id
-    text = message.text
+    text = message.text or ""
 
     if user_id not in memory:
         memory[user_id] = []
         user_model[user_id] = MODELS["llama"]
-        user_character[user_id] = "Ты полезный AI помощник."
         user_persona[user_id] = ""
+        user_character[user_id] = "Ты полезный AI помощник."
 
-    # ───── model select
+    # ───── MODEL SELECT
     if text in ["🤖 llama", "⚡ mixtral"]:
         model_key = "llama" if "llama" in text else "mixtral"
         user_model[user_id] = MODELS[model_key]
@@ -86,39 +106,42 @@ async def handler(message: types.Message):
         )
         return
 
-    # ───── persona (пользователь о себе)
+    # ───── PERSONA
     if text.startswith("/persona"):
         user_persona[user_id] = text.replace("/persona", "").strip()
         await message.answer("🧠 Persona сохранена")
         return
 
-    # ───── character (бот)
+    # ───── CHARACTER
     if text.startswith("/character"):
         user_character[user_id] = text.replace("/character", "").strip()
         await message.answer("🎭 Character обновлён")
         return
 
-    # ───── reset
+    # ───── RESET
     if text == "/reset":
         memory[user_id] = []
         await message.answer("🧹 память очищена")
         return
 
-    # ───── chat
+    # ───── CHAT MEMORY
     memory[user_id].append({"role": "user", "content": text})
-
     history = memory[user_id][-15:]
 
-    response = client.chat.completions.create(
-        model=user_model[user_id],
-        messages=[
-            {"role": "system", "content": user_character[user_id]},
-            {"role": "system", "content": f"Информация о пользователе: {user_persona[user_id]}"},
-            *history
-        ]
-    )
+    try:
+        response = client.chat.completions.create(
+            model=user_model[user_id],
+            messages=[
+                {"role": "system", "content": user_character[user_id]},
+                {"role": "system", "content": f"Информация о пользователе: {user_persona[user_id]}"},
+                *history
+            ]
+        )
 
-    answer = response.choices[0].message.content
+        answer = response.choices[0].message.content
+
+    except Exception as e:
+        answer = f"❌ Ошибка API: {str(e)}"
 
     memory[user_id].append({"role": "assistant", "content": answer})
 
@@ -130,4 +153,5 @@ async def handler(message: types.Message):
 async def main():
     await dp.start_polling(bot)
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
